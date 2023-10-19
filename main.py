@@ -5,6 +5,9 @@ import models
 import uvicorn
 from database import engine,SessionLocal
 from sqlalchemy.orm import Session
+from jwtauth import *
+from fastapi import Depends
+from jwt_bearer import jwtBearer
 
 app = FastAPI()
 
@@ -33,7 +36,7 @@ def get_db():
 
 
 
-@app.post("/details/")
+@app.post("/details/", dependencies=[Depends(jwtBearer())], tags=["posts"])
 def details_input(request:demo,db: Session = Depends(get_db)):
     new_demo = models.Demo(text=request.text,description=request.description)
     db.add(new_demo)
@@ -42,7 +45,7 @@ def details_input(request:demo,db: Session = Depends(get_db)):
     return {"message":"your data is saved"}
 
 @app.get("/demodata/")
-def GetDemoData(db: Session = Depends(get_db),status_code=status.HTTP_201_CREATED):
+def GetDemoData(db: Session = Depends(get_db)):
     demos = db.query(models.Demo).all()
     print(demos)
     return {"Here is your all demo entries":demos}
@@ -73,8 +76,31 @@ async def upgrade(id,request:demo,db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="Id no {id} is not present in db")
 
 
+@app.post("/SignUp/")
+async def signup(request:User,db: Session = Depends(get_db)):
+    print(request.username,"**********",request.password)
+    new_user = models.User(email=request.username,hashed_password=request.password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    print(signJWT(request.username))
+    return "hello"
 
 
+def checkuserdetails(data:User,db):
+    user_instance=db.query(models.User).filter(models.User.email==data.username)
+    if user_instance:
+        user_instance=user_instance.first()
+        if user_instance.hashed_password == data.password:
+            return True 
+    return False
+
+
+@app.post("/SignIN/")
+async def signin(request:User,db: Session = Depends(get_db)):
+    if checkuserdetails(request,db):
+        return signJWT(request.username)
+    return {"error":"Your credential is missmatch"}
 
 
 
